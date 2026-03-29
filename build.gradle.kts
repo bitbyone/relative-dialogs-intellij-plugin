@@ -1,3 +1,5 @@
+import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
+
 plugins {
     id("java")
     id("org.jetbrains.kotlin.jvm") version "2.1.20"
@@ -17,6 +19,15 @@ repositories {
 dependencies {
     intellijPlatform {
         intellijIdeaCommunity("2024.3.1")
+    }
+}
+
+intellijPlatformTesting {
+    runIde {
+        register("runIde2026") {
+            type = IntelliJPlatformType.IntellijIdeaUltimate
+            version = "2026.1"
+        }
     }
 }
 
