@@ -1,0 +1,26 @@
+<idea-plugin>
+    <id>one.bitby.relative-dialogs</id>
+    <name>Relative Dialogs</name>
+    <version>1.0.0</version>
+    <vendor>bitby.one</vendor>
+
+    <description><![CDATA[
+    Centers and proportionally sizes all IDE dialogs and popups relative to the main IDE window.
+    Handles Search Everywhere, Settings, Switcher, Bookmarks, File Structure, Git Branches,
+    and all generic JDialogs.
+    ]]></description>
+
+    <idea-version since-build="241"/>
+
+    <depends>com.intellij.modules.platform</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <postStartupActivity implementation="one.bitby.relativedialogs.RelativeDialogsStartupActivity"/>
+        <applicationService serviceImplementation="one.bitby.relativedialogs.RelativeDialogsSettings"/>
+        <applicationConfigurable
+            parentId="tools"
+            instance="one.bitby.relativedialogs.RelativeDialogsConfigurable"
+            id="one.bitby.relativedialogs.settings"
+            displayName="Relative Dialogs"/>
+    </extensions>
+</idea-plugin>
