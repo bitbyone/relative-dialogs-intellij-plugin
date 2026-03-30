@@ -27,7 +27,11 @@ class RelativeDialogsSettings : PersistentStateComponent<RelativeDialogsSettings
         var bookmarks = DialogConfig(widthPct = 70, heightPct = 85)
         var fileStructure = DialogConfig(widthPct = 45, heightPct = 75)
         var gitBranches = DialogConfig(widthPct = 45, heightPct = 75)
-        var genericDialog = DialogConfig(widthPct = 70, heightPct = 90)
+        // Generic dialogs (e.g. Commit, Push, Refactor) — responsive by IDE frame width.
+        // Smaller frame → larger percentage so dialogs remain usable.
+        var genericDialogSmall = DialogConfig(widthPct = 80, heightPct = 90)   // < BREAKPOINT_MEDIUM
+        var genericDialogMedium = DialogConfig(widthPct = 70, heightPct = 85)  // BREAKPOINT_MEDIUM..BREAKPOINT_LARGE
+        var genericDialogLarge = DialogConfig(widthPct = 55, heightPct = 75)   // > BREAKPOINT_LARGE
     }
 
     private var state = State()
@@ -39,6 +43,10 @@ class RelativeDialogsSettings : PersistentStateComponent<RelativeDialogsSettings
     }
 
     companion object {
+        /** IDE frame widths (px) that separate the three generic-dialog size tiers. */
+        const val BREAKPOINT_MEDIUM = 1280
+        const val BREAKPOINT_LARGE = 1920
+
         fun getInstance(): RelativeDialogsSettings =
             ApplicationManager.getApplication().getService(RelativeDialogsSettings::class.java)
     }

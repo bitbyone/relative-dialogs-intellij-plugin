@@ -24,7 +24,9 @@ class RelativeDialogsConfigurable : Configurable {
     private lateinit var bookmarks: ConfigUI
     private lateinit var fileStructure: ConfigUI
     private lateinit var gitBranches: ConfigUI
-    private lateinit var genericDialog: ConfigUI
+    private lateinit var genericDialogSmall: ConfigUI
+    private lateinit var genericDialogMedium: ConfigUI
+    private lateinit var genericDialogLarge: ConfigUI
     private var mainPanel: JComponent? = null
 
     override fun getDisplayName() = "Relative Dialogs"
@@ -37,7 +39,12 @@ class RelativeDialogsConfigurable : Configurable {
         bookmarks = createConfigUI(s.bookmarks)
         fileStructure = createConfigUI(s.fileStructure)
         gitBranches = createConfigUI(s.gitBranches)
-        genericDialog = createConfigUI(s.genericDialog)
+        genericDialogSmall = createConfigUI(s.genericDialogSmall)
+        genericDialogMedium = createConfigUI(s.genericDialogMedium)
+        genericDialogLarge = createConfigUI(s.genericDialogLarge)
+
+        val bp1 = RelativeDialogsSettings.BREAKPOINT_MEDIUM
+        val bp2 = RelativeDialogsSettings.BREAKPOINT_LARGE
 
         mainPanel = panel {
             buildGroup("Search Everywhere", "Applies to Search Everywhere, Go to Class, Actions, Go to File, etc.", searchEverywhere)
@@ -46,7 +53,39 @@ class RelativeDialogsConfigurable : Configurable {
             buildGroup("Bookmarks", "Applies to the Bookmarks popup.", bookmarks)
             buildGroup("File Structure", "Applies to File Structure (Ctrl+F12) popup.", fileStructure)
             buildGroup("Git Branches", "Applies to Git Branches popup.", gitBranches)
-            buildGroup("Generic Dialogs", "Applies to generic dialog windows (e.g. Commit, Push, Refactor). Serves as max bounds.", genericDialog)
+
+            // Generic dialogs use responsive breakpoints: smaller IDE frame → larger relative size.
+            lateinit var genericEnabled: com.intellij.ui.dsl.builder.Cell<JCheckBox>
+            group("Generic Dialogs") {
+                row {
+                    genericEnabled = cell(genericDialogSmall.enabled)
+                        .comment("Applies to generic dialog windows (e.g. Commit, Push, Refactor).")
+                }
+                group("Small  (IDE frame width < ${bp1}px)") {
+                    row("Size (%):") {
+                        cell(genericDialogSmall.wPct); label("×"); cell(genericDialogSmall.hPct)
+                    }
+                    row("Offset (px):") {
+                        cell(genericDialogSmall.wOff); label("×"); cell(genericDialogSmall.hOff)
+                    }
+                }.enabledIf(genericEnabled.selected)
+                group("Medium  (${bp1}–${bp2}px)") {
+                    row("Size (%):") {
+                        cell(genericDialogMedium.wPct); label("×"); cell(genericDialogMedium.hPct)
+                    }
+                    row("Offset (px):") {
+                        cell(genericDialogMedium.wOff); label("×"); cell(genericDialogMedium.hOff)
+                    }
+                }.enabledIf(genericEnabled.selected)
+                group("Large  (≥ ${bp2}px)") {
+                    row("Size (%):") {
+                        cell(genericDialogLarge.wPct); label("×"); cell(genericDialogLarge.hPct)
+                    }
+                    row("Offset (px):") {
+                        cell(genericDialogLarge.wOff); label("×"); cell(genericDialogLarge.hOff)
+                    }
+                }.enabledIf(genericEnabled.selected)
+            }
         }
         return mainPanel!!
     }
@@ -59,12 +98,12 @@ class RelativeDialogsConfigurable : Configurable {
             }
             row("Size (%):") {
                 cell(ui.wPct)
-                label("x")
+                label("×")
                 cell(ui.hPct)
             }.enabledIf(checkbox.selected)
             row("Offset (px):") {
                 cell(ui.wOff)
-                label("x")
+                label("×")
                 cell(ui.hOff)
             }.enabledIf(checkbox.selected)
         }
@@ -78,7 +117,9 @@ class RelativeDialogsConfigurable : Configurable {
             bookmarks.differs(s.bookmarks) ||
             fileStructure.differs(s.fileStructure) ||
             gitBranches.differs(s.gitBranches) ||
-            genericDialog.differs(s.genericDialog)
+            genericDialogSmall.differs(s.genericDialogSmall) ||
+            genericDialogMedium.differsSize(s.genericDialogMedium) ||
+            genericDialogLarge.differsSize(s.genericDialogLarge)
     }
 
     override fun apply() {
@@ -89,7 +130,12 @@ class RelativeDialogsConfigurable : Configurable {
         bookmarks.applyTo(s.bookmarks)
         fileStructure.applyTo(s.fileStructure)
         gitBranches.applyTo(s.gitBranches)
-        genericDialog.applyTo(s.genericDialog)
+        genericDialogSmall.applyTo(s.genericDialogSmall)
+        genericDialogMedium.applyTo(s.genericDialogMedium)
+        genericDialogLarge.applyTo(s.genericDialogLarge)
+        // Enabled is shared across all three generic dialog tiers (single checkbox in UI).
+        s.genericDialogMedium.enabled = s.genericDialogSmall.enabled
+        s.genericDialogLarge.enabled = s.genericDialogSmall.enabled
     }
 
     override fun reset() {
@@ -100,7 +146,9 @@ class RelativeDialogsConfigurable : Configurable {
         bookmarks.setFrom(s.bookmarks)
         fileStructure.setFrom(s.fileStructure)
         gitBranches.setFrom(s.gitBranches)
-        genericDialog.setFrom(s.genericDialog)
+        genericDialogSmall.setFrom(s.genericDialogSmall)
+        genericDialogMedium.setFrom(s.genericDialogMedium)
+        genericDialogLarge.setFrom(s.genericDialogLarge)
     }
 
     override fun disposeUIResources() { mainPanel = null }
@@ -116,7 +164,9 @@ class RelativeDialogsConfigurable : Configurable {
     )
 
     private fun ConfigUI.differs(cfg: RelativeDialogsSettings.DialogConfig) =
-        enabled.isSelected != cfg.enabled ||
+        enabled.isSelected != cfg.enabled || differsSize(cfg)
+
+    private fun ConfigUI.differsSize(cfg: RelativeDialogsSettings.DialogConfig) =
         wPct.value != cfg.widthPct ||
         hPct.value != cfg.heightPct ||
         wOff.value != cfg.widthOffset ||

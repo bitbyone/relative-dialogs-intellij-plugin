@@ -7,6 +7,8 @@ import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.wm.IdeFrame
 import java.awt.*
 import java.awt.event.AWTEventListener
+import java.awt.event.ComponentAdapter
+import java.awt.event.ComponentEvent
 import java.awt.event.HierarchyEvent
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.swing.JDialog
@@ -29,6 +31,15 @@ class RelativeDialogsStartupActivity : ProjectActivity {
 }
 
 class RelativeDialogsListener : AWTEventListener {
+
+    companion object {
+        // On native Wayland (not XWayland), applications cannot set window position —
+        // the compositor controls placement. Detect by checking WAYLAND_DISPLAY is set
+        // and we are NOT using the X11 toolkit (i.e. not running through XWayland).
+        val isWayland: Boolean =
+            System.getenv("WAYLAND_DISPLAY") != null &&
+            !Toolkit.getDefaultToolkit().javaClass.name.contains("X11")
+    }
 
     override fun eventDispatched(event: AWTEvent) {
         if (event !is HierarchyEvent) return
@@ -73,7 +84,7 @@ class RelativeDialogsListener : AWTEventListener {
                 repositionWindowOnly(parentWindow, frameBounds, s.gitBranches)
 
             component is JDialog ->
-                repositionDialog(component, frameBounds, s.genericDialog)
+                repositionDialog(component, frameBounds, s)
         }
     }
 
@@ -83,12 +94,14 @@ class RelativeDialogsListener : AWTEventListener {
         if (!cfg.enabled) return
         val bounds = frameBounds.percent(cfg.widthPct, cfg.heightPct, cfg.widthOffset, cfg.heightOffset)
         val action = {
-            win.bounds = bounds
+            win.minimumSize = bounds.size
+            win.applyBoundsOrSize(bounds, frameBounds)
+            component.minimumSize = bounds.size
             component.preferredSize = bounds.size
             component.bounds = Rectangle(0, 0, bounds.width, bounds.height)
             win.revalidate()
         }
-        
+
         if (enforce) {
             SwingUtilities.invokeLater {
                 action()
@@ -99,6 +112,12 @@ class RelativeDialogsListener : AWTEventListener {
                     isRepeats = false
                     start()
                 }
+            }
+            // Persistently prevent the window from collapsing (e.g. when search text is cleared
+            // and internal panels unmount). minimumSize alone doesn't help because IntelliJ may
+            // call setBounds/setSize directly, bypassing the minimum-size constraint.
+            if (win.componentListeners.none { it is SizeEnforcer }) {
+                win.addComponentListener(SizeEnforcer(win, bounds))
             }
         } else {
             SwingUtilities.invokeLater { action() }
@@ -111,32 +130,22 @@ class RelativeDialogsListener : AWTEventListener {
         if (!cfg.enabled) return
         val bounds = frameBounds.percent(cfg.widthPct, cfg.heightPct, cfg.widthOffset, cfg.heightOffset)
         SwingUtilities.invokeLater {
-            win.bounds = bounds
+            win.applyBoundsOrSize(bounds, frameBounds)
             win.revalidate()
         }
     }
 
-    private fun repositionDialog(dialog: JDialog, frameBounds: Rectangle, cfg: RelativeDialogsSettings.DialogConfig) {
+    private fun repositionDialog(dialog: JDialog, frameBounds: Rectangle, s: RelativeDialogsSettings.State) {
+        val cfg = when {
+            frameBounds.width < RelativeDialogsSettings.BREAKPOINT_MEDIUM -> s.genericDialogSmall
+            frameBounds.width < RelativeDialogsSettings.BREAKPOINT_LARGE  -> s.genericDialogMedium
+            else                                                           -> s.genericDialogLarge
+        }
         if (!cfg.enabled) return
         SwingUtilities.invokeLater {
-            val size = dialog.size
-            if (size.width <= 0 || size.height <= 0) return@invokeLater
-
-            val scaleFactor = when {
-                size.width < 380 && size.height < 250 -> 1.6
-                size.width < 800 && size.height < 600 -> 1.4
-                else -> 1.2
-            }
-            var bounds = frameBounds.center(
-                (size.width * scaleFactor).toInt(),
-                (size.height * scaleFactor).toInt()
-            )
-            val maxBounds = frameBounds.percent(cfg.widthPct, cfg.heightPct, cfg.widthOffset, cfg.heightOffset)
-            if (bounds.width > maxBounds.width || bounds.height > maxBounds.height) {
-                bounds = maxBounds
-            }
+            val bounds = frameBounds.percent(cfg.widthPct, cfg.heightPct, cfg.widthOffset, cfg.heightOffset)
             dialog.preferredSize = bounds.size
-            dialog.bounds = bounds
+            dialog.applyBoundsOrSize(bounds, frameBounds)
             dialog.revalidate()
         }
     }
@@ -160,6 +169,30 @@ class RelativeDialogsListener : AWTEventListener {
         return SwingUtilities.getWindowAncestor(component)
     }
 
+    // On Wayland, coordinate systems differ by window type:
+    //   - xdg_toplevel (decorated): compositor controls position → size only.
+    //   - xdg_popup (undecorated): JBR positions via xdg_positioner using coordinates relative
+    //     to the parent window surface. Our bounds are in absolute screen coords, so subtract
+    //     the frame origin to convert to the parent-relative system.
+    private fun Window.applyBoundsOrSize(bounds: Rectangle, frameBounds: Rectangle) {
+        when {
+            !isWayland -> this.bounds = bounds
+            isUndecorated() -> this.bounds = Rectangle(
+                bounds.x - frameBounds.x,
+                bounds.y - frameBounds.y,
+                bounds.width,
+                bounds.height
+            )
+            else -> size = bounds.size
+        }
+    }
+
+    private fun Window.isUndecorated(): Boolean = when (this) {
+        is java.awt.Dialog -> isUndecorated
+        is java.awt.Frame  -> isUndecorated
+        else               -> true
+    }
+
     private fun Rectangle.center(nwidth: Int, nheight: Int): Rectangle =
         Rectangle(x + (width - nwidth) / 2, y + (height - nheight) / 2, nwidth, nheight)
 
@@ -167,5 +200,23 @@ class RelativeDialogsListener : AWTEventListener {
         val nw = ((width * xp / 100.0) + xOff).toInt().coerceAtLeast(0)
         val nh = ((height * yp / 100.0) + yOff).toInt().coerceAtLeast(0)
         return center(nw, nh)
+    }
+}
+
+/**
+ * Prevents a window from shrinking below [minBounds] after it has been positioned.
+ * IntelliJ's SearchEverywhereUI can call setBounds/setSize directly (bypassing minimumSize)
+ * when internal panels unmount (e.g. results list or preview panel on empty search text).
+ */
+private class SizeEnforcer(private val win: Window, private val minBounds: Rectangle) : ComponentAdapter() {
+    private var enforcing = false
+
+    override fun componentResized(e: ComponentEvent) {
+        if (enforcing) return
+        if (win.width < minBounds.width || win.height < minBounds.height) {
+            enforcing = true
+            if (RelativeDialogsListener.isWayland) win.size = minBounds.size else win.bounds = minBounds
+            enforcing = false
+        }
     }
 }
