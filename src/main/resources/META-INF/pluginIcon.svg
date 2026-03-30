@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" xmlns:bx="https://boxy-svg.com">
+  <defs>
+    <linearGradient id="color-0" bx:pinned="true" gradientUnits="userSpaceOnUse">
+      <stop style="stop-color: #d8d8d8;"/>
+    </linearGradient>
+    <pattern x="0" y="0" width="25" height="25" patternUnits="userSpaceOnUse" viewBox="0 0 100 100" id="pattern-0">
+      <rect x="0" y="0" width="50" height="100" style="fill: black;"/>
+    </pattern>
+    <pattern id="pattern-0-0" href="#pattern-0" patternTransform="matrix(1, 0, 0, 1, 295.989044, 237.161797)"/>
+    <pattern id="pattern-0-1" href="#pattern-0" patternTransform="matrix(1, 0, 0, 1, -205.129974, 237.161804)"/>
+    <filter id="drop-shadow-filter-0" bx:preset="drop-shadow 1 10 10 6 0.68 #00000063" color-interpolation-filters="sRGB" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="6"/>
+      <feOffset dx="10" dy="10"/>
+      <feComponentTransfer result="offsetblur">
+        <feFuncA id="spread-ctrl" type="linear" slope="1.36"/>
+      </feComponentTransfer>
+      <feFlood flood-color="#00000063"/>
+      <feComposite in2="offsetblur" operator="in"/>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="point-light-filter-0" bx:preset="point-light 1 0.5 0.5 0.5 14 1.09 0.25 0 #ffffff" primitiveUnits="objectBoundingBox" color-interpolation-filters="sRGB" x="-50%" y="-50%" width="200%" height="200%">
+      <feSpecularLighting result="specular-lighting" lighting-color="#ffffff" specularConstant="1.09" specularExponent="14">
+        <fePointLight x="0.5" y="0.5" z="0.5"/>
+      </feSpecularLighting>
+      <feDiffuseLighting result="diffuse-lighting" lighting-color="#ffffff" diffuseConstant="0.25">
+        <fePointLight x="0.5" y="0.5" z="0.5"/>
+      </feDiffuseLighting>
+      <feMerge result="lighting">
+        <feMergeNode in="diffuse-lighting"/>
+        <feMergeNode in="specular-lighting"/>
+      </feMerge>
+      <feComposite in="SourceGraphic" in2="lighting" operator="arithmetic" k1="1" k2="0" k3="0" k4="0"/>
+    </filter>
+    <filter id="inner-shadow-filter-0" bx:preset="inner-shadow 1 0 0 14 0.69 #243d4c" color-interpolation-filters="sRGB" x="-50%" y="-50%" width="200%" height="200%">
+      <feOffset dx="0" dy="0"/>
+      <feGaussianBlur stdDeviation="14"/>
+      <feComposite operator="out" in="SourceGraphic"/>
+      <feComponentTransfer result="choke">
+        <feFuncA type="linear" slope="1.38"/>
+      </feComponentTransfer>
+      <feFlood flood-color="#243d4c" result="color"/>
+      <feComposite operator="in" in="color" in2="choke" result="shadow"/>
+      <feComposite operator="over" in="shadow" in2="SourceGraphic"/>
+    </filter>
+  </defs>
+  <g style="" transform="matrix(0.071026, 0, 0, 0.070751, -1.747808, -1.701281)">
+    <rect x="24.608" width="450.539" height="452.291" style="stroke-linecap: round; stroke-width: 6px; stroke-dasharray: 10; stroke-linejoin: round; fill: rgb(111, 198, 228); fill-opacity: 0.64; isolation: isolate; filter: url(&quot;#point-light-filter-0&quot;) url(&quot;#inner-shadow-filter-0&quot;);" y="24.046"/>
+    <rect x="92.279" y="90.825" width="315.198" height="318.732" style="stroke-width: 33; paint-order: fill; stroke-linejoin: round; stroke-linecap: round; fill-rule: nonzero; stroke: rgb(20, 20, 20); fill: rgb(77, 139, 178); filter: url(&quot;#drop-shadow-filter-0&quot;);"/>
+    <text style="fill: url(&quot;#pattern-0-0&quot;); fill-opacity: 0.9; font-family: &quot;SauceCodePro Nerd Font&quot;; font-size: 240px; font-weight: 700; paint-order: fill; stroke: rgb(251, 251, 251); stroke-dashoffset: 7px; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 1; stroke-width: 5px; white-space: pre;" x="236.489" y="334.942">D</text>
+    <text style="fill: url(&quot;#pattern-0-1&quot;); fill-opacity: 0.9; font-family: &quot;SauceCodePro Nerd Font&quot;; font-size: 240px; font-weight: 700; paint-order: fill; stroke: rgb(251, 251, 251); stroke-dashoffset: 7px; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 1; stroke-width: 5px; white-space: pre;" transform="matrix(-1, 0, 0, 1, 0, 0)" x="-264.63" y="334.942">R</text>
+  </g>
+</svg>

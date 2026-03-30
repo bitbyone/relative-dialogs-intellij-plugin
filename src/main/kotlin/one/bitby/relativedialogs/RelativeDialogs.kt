@@ -38,8 +38,12 @@ class RelativeDialogsListener : AWTEventListener {
         // and we are NOT using the X11 toolkit (i.e. not running through XWayland).
         val isWayland: Boolean =
             System.getenv("WAYLAND_DISPLAY") != null &&
-            !Toolkit.getDefaultToolkit().javaClass.name.contains("X11")
+                    !Toolkit.getDefaultToolkit().javaClass.name.contains("X11")
     }
+
+    // Windows with an active enforcement timer — prevents re-entrant loops where
+    // revalidate() triggers new HIERARCHY_EVENTs that would start more timers.
+    private val activeTimers = java.util.WeakHashMap<Window, javax.swing.Timer>()
 
     override fun eventDispatched(event: AWTEvent) {
         if (event !is HierarchyEvent) return
@@ -78,18 +82,47 @@ class RelativeDialogsListener : AWTEventListener {
                 repositionPopup(component, parentWindow, frameBounds, s.bookmarks)
 
             className.contains("FileStructure") ->
-                repositionWindowOnly(parentWindow, frameBounds, s.fileStructure)
+                repositionPopup(component, parentWindow, frameBounds, s.fileStructure)
 
             className.contains("GitBranches") ->
-                repositionWindowOnly(parentWindow, frameBounds, s.gitBranches)
+                repositionPopup(component, parentWindow, frameBounds, s.gitBranches)
 
-            component is JDialog ->
-                repositionDialog(component, frameBounds, s)
+            component is JDialog -> {
+                val cfg = when {
+                    frameBounds.width < RelativeDialogsSettings.BREAKPOINT_MEDIUM -> s.genericDialogSmall
+                    frameBounds.width < RelativeDialogsSettings.BREAKPOINT_LARGE -> s.genericDialogMedium
+                    else -> s.genericDialogLarge
+                }
+                if (!cfg.enabled) return
+                repositionPopup(component, parentWindow, frameBounds, cfg, enforce = true)
+//                repositionDialog(component, frameBounds, s)
+            }
+        }
+    }
+
+    // Applies action() and then repeats it for ~1.5 s to override IntelliJ's own position
+    // restoration (e.g. after IDE frame resize) and compositor repositioning on Wayland.
+    // Skips if a timer is already running for this window (prevents re-entrant loops).
+    private fun applyRepeated(win: Window, action: () -> Unit) {
+        if (activeTimers.containsKey(win)) return
+        SwingUtilities.invokeLater {
+            action()
+            val timer = javax.swing.Timer(10) { action() }
+            activeTimers[win] = timer
+            timer.start()
+            javax.swing.Timer(300) {
+                timer.stop()
+                activeTimers.remove(win)
+            }.apply { isRepeats = false; start() }
         }
     }
 
     private fun repositionPopup(
-        component: Component, win: Window, frameBounds: Rectangle, cfg: RelativeDialogsSettings.DialogConfig, enforce: Boolean = false
+        component: Component,
+        win: Window,
+        frameBounds: Rectangle,
+        cfg: RelativeDialogsSettings.DialogConfig,
+        enforce: Boolean = false
     ) {
         if (!cfg.enabled) return
         val bounds = frameBounds.percent(cfg.widthPct, cfg.heightPct, cfg.widthOffset, cfg.heightOffset)
@@ -102,26 +135,16 @@ class RelativeDialogsListener : AWTEventListener {
             win.revalidate()
         }
 
-        if (enforce) {
-            SwingUtilities.invokeLater {
-                action()
-                // Enforce bounds continuously for a short duration to override internal layout/animations
-                val timer = javax.swing.Timer(16) { action() }
-                timer.start()
-                javax.swing.Timer(400) { timer.stop() }.apply {
-                    isRepeats = false
-                    start()
-                }
-            }
+        applyRepeated(win, action)
+
+//        if (enforce) {
             // Persistently prevent the window from collapsing (e.g. when search text is cleared
             // and internal panels unmount). minimumSize alone doesn't help because IntelliJ may
             // call setBounds/setSize directly, bypassing the minimum-size constraint.
-            if (win.componentListeners.none { it is SizeEnforcer }) {
-                win.addComponentListener(SizeEnforcer(win, bounds))
-            }
-        } else {
-            SwingUtilities.invokeLater { action() }
-        }
+            // Always replace any existing SizeEnforcer so it reflects current settings bounds.
+            win.componentListeners.filterIsInstance<SizeEnforcer>().forEach { win.removeComponentListener(it) }
+            win.addComponentListener(SizeEnforcer(win, bounds))
+//        }
     }
 
     private fun repositionWindowOnly(
@@ -129,7 +152,7 @@ class RelativeDialogsListener : AWTEventListener {
     ) {
         if (!cfg.enabled) return
         val bounds = frameBounds.percent(cfg.widthPct, cfg.heightPct, cfg.widthOffset, cfg.heightOffset)
-        SwingUtilities.invokeLater {
+        applyRepeated(win) {
             win.applyBoundsOrSize(bounds, frameBounds)
             win.revalidate()
         }
@@ -138,12 +161,12 @@ class RelativeDialogsListener : AWTEventListener {
     private fun repositionDialog(dialog: JDialog, frameBounds: Rectangle, s: RelativeDialogsSettings.State) {
         val cfg = when {
             frameBounds.width < RelativeDialogsSettings.BREAKPOINT_MEDIUM -> s.genericDialogSmall
-            frameBounds.width < RelativeDialogsSettings.BREAKPOINT_LARGE  -> s.genericDialogMedium
-            else                                                           -> s.genericDialogLarge
+            frameBounds.width < RelativeDialogsSettings.BREAKPOINT_LARGE -> s.genericDialogMedium
+            else -> s.genericDialogLarge
         }
         if (!cfg.enabled) return
-        SwingUtilities.invokeLater {
-            val bounds = frameBounds.percent(cfg.widthPct, cfg.heightPct, cfg.widthOffset, cfg.heightOffset)
+        val bounds = frameBounds.percent(cfg.widthPct, cfg.heightPct, cfg.widthOffset, cfg.heightOffset)
+        applyRepeated(dialog) {
             dialog.preferredSize = bounds.size
             dialog.applyBoundsOrSize(bounds, frameBounds)
             dialog.revalidate()
@@ -152,7 +175,7 @@ class RelativeDialogsListener : AWTEventListener {
 
     private fun findIdeFrameBounds(component: Component): Rectangle? {
         var window: Window? = if (component is Window) component
-            else SwingUtilities.getWindowAncestor(component)
+        else SwingUtilities.getWindowAncestor(component)
         while (window != null) {
             if (window is IdeFrame && window is Frame) return window.bounds
             window = window.owner
@@ -183,14 +206,15 @@ class RelativeDialogsListener : AWTEventListener {
                 bounds.width,
                 bounds.height
             )
+
             else -> size = bounds.size
         }
     }
 
     private fun Window.isUndecorated(): Boolean = when (this) {
         is java.awt.Dialog -> isUndecorated
-        is java.awt.Frame  -> isUndecorated
-        else               -> true
+        is java.awt.Frame -> isUndecorated
+        else -> true
     }
 
     private fun Rectangle.center(nwidth: Int, nheight: Int): Rectangle =
