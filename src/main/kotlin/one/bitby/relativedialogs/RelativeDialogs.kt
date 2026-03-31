@@ -129,9 +129,11 @@ class RelativeDialogsListener : AWTEventListener {
         val action = {
             win.minimumSize = bounds.size
             win.applyBoundsOrSize(bounds, frameBounds)
-            component.minimumSize = bounds.size
-            component.preferredSize = bounds.size
-            component.bounds = Rectangle(0, 0, bounds.width, bounds.height)
+            if (component !== win) {
+                component.minimumSize = bounds.size
+                component.preferredSize = bounds.size
+                component.bounds = Rectangle(0, 0, bounds.width, bounds.height)
+            }
             win.revalidate()
         }
 
